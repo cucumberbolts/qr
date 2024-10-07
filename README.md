@@ -1,0 +1,2 @@
+# qr
+Exploring QR codes.
