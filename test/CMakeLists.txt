@@ -1,7 +1,8 @@
 # Test data encodation
 add_executable(encoding_test encoding_test.c)
+add_executable(error_test error_test.c)
 
-set(TESTS encoding_test)
+set(TESTS encoding_test error_test)
 
 # For IDEs
 set_target_properties(${TESTS} PROPERTIES FOLDER "QR/Tests")
