@@ -5,6 +5,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Taken from https://stackoverflow.com/questions/3437404/min-and-max-in-c
+#define min(a,b) \
+   ({ __typeof__ (a) _a = (a); \
+      __typeof__ (b) _b = (b); \
+    _a > _b ? _b : _a; })
+
 typedef enum {
     MODE_ECI         = 0b0111,
     MODE_NUMERIC     = 0b0001,

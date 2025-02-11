@@ -10,6 +10,7 @@ set(SOURCES
 
     "src/qr.c"
     "src/qr_write.c"
+    "src/module.c"
 
     "lib/stb_image_write.h"
 )

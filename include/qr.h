@@ -2,6 +2,7 @@
 #define __QR_H__
 
 #include <stdint.h>
+#include <stddef.h>
 
 typedef enum {
     ERROR_LEVEL_LOW,

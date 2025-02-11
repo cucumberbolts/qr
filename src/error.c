@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "qr.h"
+
 /* Print bytes in binary */
 void print_bits(uint8_t* data, size_t size) {
     for (size_t i = 0; i < size; i++) {
@@ -142,9 +144,9 @@ uint8_t* get_generator(uint32_t degree) {
     return &gen_coefficients[offset];
 }
 
+// TODO: IS THIS NEEDED?
 // Returns the error correction codewords
 // of length 'gen_deg' for an array of message codewords
-// TODO: REPLACE GEN_DEG WITH QR_VERSION AND ERROR_LEVEL
 uint8_t* get_error_codewords(uint8_t* msg, size_t msg_len, uint32_t gen_deg) {
     uint8_t* e_codewords = (uint8_t*)malloc(gen_deg);
 
@@ -153,6 +155,7 @@ uint8_t* get_error_codewords(uint8_t* msg, size_t msg_len, uint32_t gen_deg) {
 
     return e_codewords;
 }
+
 
 #if 0
 int main() {
