@@ -29,7 +29,8 @@ int test_hello_world_error() {
         67, 64, 236, 17, 236, 17, 236, 17,
     };
 
-    uint8_t* e_codewords = get_error_codewords(msg, sizeof(msg), 10);
+    uint8_t* e_codewords = (uint8_t*)malloc(10);
+    get_error_codewords(msg, sizeof(msg), e_codewords, 10);
 
     for (int i = 0; i < 10; i++) {
         printf("Codeword: %d\n", e_codewords[i]);

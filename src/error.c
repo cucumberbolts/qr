@@ -4,8 +4,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include "qr.h"
-
 /* Print bytes in binary */
 void print_bits(uint8_t* data, size_t size) {
     for (size_t i = 0; i < size; i++) {
@@ -61,9 +59,6 @@ uint8_t ff_multiply(uint8_t a, uint8_t b) {
 // Returns the coefficents of the remainder into rem
 void poly_div(uint8_t* a, uint8_t* b, size_t a_deg, size_t b_deg, size_t a_shift, uint8_t* rem) {
     uint8_t buff[MAX_DEGREE] = { 0 };
-
-    if (b_deg > a_deg)
-         return;
 
     if (a_deg + 1 + a_shift > MAX_DEGREE) {
         printf("poly_div(): polynomial too big!\n");
@@ -144,94 +139,9 @@ uint8_t* get_generator(uint32_t degree) {
     return &gen_coefficients[offset];
 }
 
-// TODO: IS THIS NEEDED?
 // Returns the error correction codewords
 // of length 'gen_deg' for an array of message codewords
-uint8_t* get_error_codewords(uint8_t* msg, size_t msg_len, uint32_t gen_deg) {
-    uint8_t* e_codewords = (uint8_t*)malloc(gen_deg);
-
+void get_error_codewords(uint8_t* msg, size_t msg_len, uint8_t* dst, uint32_t codeword_cnt) {
     uint32_t msg_deg = msg_len - 1;
-    poly_div(msg, get_generator(gen_deg), msg_deg, gen_deg, gen_deg, e_codewords);
-
-    return e_codewords;
+    poly_div(msg, get_generator(codeword_cnt), msg_deg, codeword_cnt, codeword_cnt, dst);
 }
-
-
-#if 0
-int main() {
-    init_finite_field();
-    init_generators();
-
-    //2^170 * 2^164 = 2^(170 + 164) = 2^334 = 2^(334%255) = 2^79
-    //215 * 198 = 240
-    // printf("%d\n", ff_exp[79]);
-    // printf("%d\n", ff_exp[(ff_log[215] + ff_log[198]) % 255]);
-    // printf("%d\n", ff_multiply(215, 198));
-    // printf("%d\n", ff_mul8(215, 198, 0b100011101));
-
-#if 0
-    // Generator polynomial test
-    // uint32_t degree = 68;
-    // printf("Degree 10 generator:\n");
-    // for (int i = 0; i <= degree; i++) {
-    //     printf("a^%dx^%d ", get_generator(degree)[i], degree - i);
-    // }
-    // printf("\n");
-
-    // Message polynomial (dividend)
-    // Degree 15 * x^10 -> Degree 25
-    uint8_t msg[26] = {
-        32, 91, 11, 120, 209, 114, 220, 77,
-        67, 64, 236, 17, 236, 17, 236, 17,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    };
-
-    // Generator polynomial (divisor)
-    // degree 10
-    uint8_t gen[26] = { 0 };
-    memcpy(gen, get_generator(10), 11);
-
-    for (int i = 0; i < 11; i++) {
-        printf("GEN: %d\n", gen[i]);
-    }
-
-    // Suffix polynomial (remainder)
-    uint8_t suf[100] = { 0 };
-
-    poly_div(msg, gen, 16, 10, 10, suf);
-
-    printf("REMAINDER:\n");
-    for (int i = 0; i < 25; i++) {
-        printf("%d\n", suf[i]);
-    }
-
-    // for (int i = 0; i < 20; ++i) {
-    //     printf("%d\n", suf[i]);
-    // }
-
-    // uint8_t data[] = {
-    //     0b01000001, 0b11010110, 0b10000111, 0b01000111, 0b01000111, 0b00000111,
-    //     0b00110011, 0b10100010, 0b11110010, 0b11110110, 0b00010111, 0b01000110,
-    //     0b00110110, 0b11010010, 0b11100110, 0b11010110, 0b00010111, 0b01000110,
-    //     0b10000110, 0b00010110, 0b11100110, 0b01000111, 0b01000110, 0b01010110,
-    //     0b00110110, 0b10000010, 0b11100110, 0b11110111, 0b00100110, 0b01110010,
-    //     0b11110000, 0b11101100, 0b00010001, 0b11101100, 0b00010001, 0b11101100,
-    // };
-
-#else
-
-    uint8_t msg[] = {
-        32, 91, 11, 120, 209, 114, 220, 77,
-        67, 64, 236, 17, 236, 17, 236, 17,
-    };
-
-    uint8_t* e_codewords = get_error_codewords(msg, sizeof(msg), 10);
-
-    for (int i = 0; i < 10; i++) {
-        printf("Codeword: %d\n", e_codewords[i]);
-    }
-
-    free(e_codewords);
-#endif
-}
-#endif

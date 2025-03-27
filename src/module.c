@@ -7,6 +7,9 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "../lib/stb_image_write.h"
 
+#include "qr.h"
+#include "error.h"
+
 // Notes:
 // side_length = (version - 1) * 4 + 21
 // Dark pixel is always at ((4 * version) + 9, 8)
@@ -57,8 +60,6 @@ uint8_t align_pat_coords[] = {
     6, 26, 54, 82, 110, 138, 166,
     6, 30, 58, 86, 114, 142, 170,
 };
-
-typedef uint8_t Version;
 
 // Returns the number of row-column coordinates from
 // the alignment pattern table for a given qr version
@@ -282,6 +283,148 @@ void print_qr(const uint8_t* data, Version ver) {
     }
 }
 
+// 1: Error correction codewords per block
+// 2: Number of blocks in first group
+// 3: Number of data codewords in each block
+// 4: Number of blocks in second group
+// 5: Number of data codewords in each block
+// Data taken from https://www.thonky.com/qr-code-tutorial/error-correction-table
+const uint8_t error_table[] = {
+    7, 1, 19, 0, 0, 10, 1, 16, 0, 0, 13, 1, 13, 0, 0,
+    17, 1, 9, 0, 0, 10, 1, 34, 0, 0, 16, 1, 28, 0, 0,
+    22, 1, 22, 0, 0, 28, 1, 16, 0, 0, 15, 1, 55, 0, 0,
+    26, 1, 44, 0, 0, 18, 2, 17, 0, 0, 22, 2, 13, 0, 0,
+    20, 1, 80, 0, 0, 18, 2, 32, 0, 0, 26, 2, 24, 0, 0,
+    16, 4, 9, 0, 0, 26, 1, 108, 0, 0, 24, 2, 43, 0, 0,
+    18, 2, 15, 2, 16, 22, 2, 11, 2, 12, 18, 2, 68, 0, 0,
+    16, 4, 27, 0, 0, 24, 4, 19, 0, 0, 28, 4, 15, 0, 0,
+    20, 2, 78, 0, 0, 18, 4, 31, 0, 0, 18, 2, 14, 4, 15,
+    26, 4, 13, 1, 14, 24, 2, 97, 0, 0, 22, 2, 38, 2, 39,
+    22, 4, 18, 2, 19, 26, 4, 14, 2, 15, 30, 2, 116, 0, 0,
+    22, 3, 36, 2, 37, 20, 4, 16, 4, 17, 24, 4, 12, 4, 13,
+    18, 2, 68, 2, 69, 26, 4, 43, 1, 44, 24, 6, 19, 2, 20,
+    28, 6, 15, 2, 16, 20, 4, 81, 0, 0, 30, 1, 50, 4, 51,
+    28, 4, 22, 4, 23, 24, 3, 12, 8, 13, 24, 2, 92, 2, 93,
+    22, 6, 36, 2, 37, 26, 4, 20, 6, 21, 28, 7, 14, 4, 15,
+    26, 4, 107, 0, 0, 22, 8, 37, 1, 38, 24, 8, 20, 4, 21,
+    22, 12, 11, 4, 12, 30, 3, 115, 1, 116, 24, 4, 40, 5, 41,
+    20, 11, 16, 5, 17, 24, 11, 12, 5, 13, 22, 5, 87, 1, 88,
+    24, 5, 41, 5, 42, 30, 5, 24, 7, 25, 24, 11, 12, 7, 13,
+    24, 5, 98, 1, 99, 28, 7, 45, 3, 46, 24, 15, 19, 2, 20,
+    30, 3, 15, 13, 16, 28, 1, 107, 5, 108, 28, 10, 46, 1, 47,
+    28, 1, 22, 15, 23, 28, 2, 14, 17, 15, 30, 5, 120, 1, 121,
+    26, 9, 43, 4, 44, 28, 17, 22, 1, 23, 28, 2, 14, 19, 15,
+    28, 3, 113, 4, 114, 26, 3, 44, 11, 45, 26, 17, 21, 4, 22,
+    26, 9, 13, 16, 14, 28, 3, 107, 5, 108, 26, 3, 41, 13, 42,
+    30, 15, 24, 5, 25, 28, 15, 15, 10, 16, 28, 4, 116, 4, 117,
+    26, 17, 42, 0, 0, 28, 17, 22, 6, 23, 30, 19, 16, 6, 17,
+    28, 2, 111, 7, 112, 28, 17, 46, 0, 0, 30, 7, 24, 16, 25,
+    24, 34, 13, 0, 0, 30, 4, 121, 5, 122, 28, 4, 47, 14, 48,
+    30, 11, 24, 14, 25, 30, 16, 15, 14, 16, 30, 6, 117, 4, 118,
+    28, 6, 45, 14, 46, 30, 11, 24, 16, 25, 30, 30, 16, 2, 17,
+    26, 8, 106, 4, 107, 28, 8, 47, 13, 48, 30, 7, 24, 22, 25,
+    30, 22, 15, 13, 16, 28, 10, 114, 2, 115, 28, 19, 46, 4, 47,
+    28, 28, 22, 6, 23, 30, 33, 16, 4, 17, 30, 8, 122, 4, 123,
+    28, 22, 45, 3, 46, 30, 8, 23, 26, 24, 30, 12, 15, 28, 16,
+    30, 3, 117, 10, 118, 28, 3, 45, 23, 46, 30, 4, 24, 31, 25,
+    30, 11, 15, 31, 16, 30, 7, 116, 7, 117, 28, 21, 45, 7, 46,
+    30, 1, 23, 37, 24, 30, 19, 15, 26, 16, 30, 5, 115, 10, 116,
+    28, 19, 47, 10, 48, 30, 15, 24, 25, 25, 30, 23, 15, 25, 16,
+    30, 13, 115, 3, 116, 28, 2, 46, 29, 47, 30, 42, 24, 1, 25,
+    30, 23, 15, 28, 16, 30, 17, 115, 0, 0, 28, 10, 46, 23, 47,
+    30, 10, 24, 35, 25, 30, 19, 15, 35, 16, 30, 17, 115, 1, 116,
+    28, 14, 46, 21, 47, 30, 29, 24, 19, 25, 30, 11, 15, 46, 16,
+    30, 13, 115, 6, 116, 28, 14, 46, 23, 47, 30, 44, 24, 7, 25,
+    30, 59, 16, 1, 17, 30, 12, 121, 7, 122, 28, 12, 47, 26, 48,
+    30, 39, 24, 14, 25, 30, 22, 15, 41, 16, 30, 6, 121, 14, 122,
+    28, 6, 47, 34, 48, 30, 46, 24, 10, 25, 30, 2, 15, 64, 16,
+    30, 17, 122, 4, 123, 28, 29, 46, 14, 47, 30, 49, 24, 10, 25,
+    30, 24, 15, 46, 16, 30, 4, 122, 18, 123, 28, 13, 46, 32, 47,
+    30, 48, 24, 14, 25, 30, 42, 15, 32, 16, 30, 20, 117, 4, 118,
+    28, 40, 47, 7, 48, 30, 43, 24, 22, 25, 30, 10, 15, 67, 16,
+    30, 19, 118, 6, 119, 28, 18, 47, 31, 48, 30, 34, 24, 34, 25,
+    30, 20, 15, 61, 16,
+};
+
+uint8_t* get_final_message(uint8_t* msg, size_t msg_len, Version ver, ErrorLevel lvl) {
+    size_t offset = 20 * (ver - 1) + 5 * lvl;
+    // Number of error codewords for each block
+    uint8_t err_cnt = error_table[offset];
+    // Number of blocks in group 1
+    uint8_t block_cnt_1 = error_table[offset + 1];
+    // Number of data codewords in each group 1 block
+    uint8_t word_cnt_1 = error_table[offset + 2];
+    // Number of blocks in group 2
+    uint8_t block_cnt_2 = error_table[offset + 3];
+    // Number of data codewords in each group 2 block
+    uint8_t word_cnt_2 = error_table[offset + 4];
+
+    // Verify the length of msg
+    const size_t total_data_words = (size_t)block_cnt_1 * (size_t)word_cnt_1 + (size_t)block_cnt_2 * (size_t)word_cnt_2;
+    if (msg_len != total_data_words) {
+        printf("get_final_message(): Suspicious msg len!\n");
+        printf("Expected size: %zu, Actual size: %zu\n", total_data_words, msg_len);
+        return NULL;
+    }
+
+    // Add one since 'error_cnt' is the degree, and
+    // the number of terms is 1 more than that
+    const size_t total_err_words = err_cnt * (block_cnt_1 + block_cnt_2);
+    uint8_t* err_words = (uint8_t*)malloc(total_err_words);
+
+    // Generate error correction codewords for each block
+    size_t msg_offset = 0;
+    size_t err_offset = 0;
+
+    const uint8_t block_cnt = block_cnt_1 + block_cnt_2;
+
+    // Generate the error correction codewords for each block in group 1
+    for (uint32_t i = 0; i < block_cnt_1; ++i) {
+        get_error_codewords(msg + msg_offset, word_cnt_1, err_words + err_offset, err_cnt);
+        msg_offset += word_cnt_1;
+        err_offset += err_cnt;
+    }
+
+    // Generate the error correction codewords for each block in group 2
+    for (uint32_t i = 0; i < block_cnt_2; ++i) {
+        get_error_codewords(msg + msg_offset, word_cnt_2, err_words + err_offset, err_cnt);
+        msg_offset += word_cnt_2;
+        err_offset += err_cnt;
+    }
+
+    // Structure final message
+    const size_t final_size = total_data_words + total_err_words;
+    uint8_t* final = (uint8_t*)malloc(final_size);
+
+    // Interleave message codewords
+    for (uint32_t i = 0; i < word_cnt_1; ++i) {
+        for (uint32_t b = 0; b < block_cnt; ++b) {
+            size_t y;
+            if (b < block_cnt_1)
+                y = b * word_cnt_1;
+            else
+                y = block_cnt_1 * word_cnt_1 + (b - block_cnt_1) * word_cnt_2;
+
+            final[i * block_cnt + b] = msg[y + i];
+        }
+    }
+
+    // Add on the extra words from group 2
+    // If group 2 exists, the number of codewords in
+    // each group 2 block is one more than group 1
+    for (uint32_t b = 0; b < block_cnt_2; ++b)
+        final[word_cnt_1 * block_cnt + b] = msg[word_cnt_1 * block_cnt_1 + (b + 1) * word_cnt_2 - 1];
+
+    // Interleave error correction codewords
+    for (uint32_t i = 0; i < err_cnt; ++i)
+        for (uint32_t b = 0; b < block_cnt; ++b)
+            final[msg_len + i * block_cnt + b] = err_words[b * err_cnt + i];
+
+    free(err_words);
+
+    return final;
+}
+
 void write_qr(const char* file, int img_width, const uint8_t* data, Version ver) {
     uint32_t side = (ver - 1) * 4 + 21;
 
@@ -310,24 +453,3 @@ void write_qr(const char* file, int img_width, const uint8_t* data, Version ver)
     free(img_data);
 }
 
-int main() {
-    printf("QR WRITE TEST\n");
-
-    uint8_t chunk[] = {
-        0b11101101, 0b11011110, 0b11110111, 0b00000011
-    };
-
-    // For the test data, repeat the "chunk" n times
-    #define n 6
-    uint8_t data[n * sizeof(chunk)];
-    for (uint32_t i = 0; i < n; ++i) {
-        memcpy(data + i * sizeof(chunk), chunk, sizeof(chunk));
-    }
-
-    Version ver = 2;
-    uint8_t* qr = create_qr(ver, data, sizeof(data));
-    printf("Created QR code!\n");
-    print_qr(qr, ver);
-    write_qr("qr.bmp", 1000, qr, ver);
-    free(qr);
-}
