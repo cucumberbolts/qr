@@ -117,8 +117,10 @@ void write_square(uint8_t* canvas, size_t canvas_size, const uint8_t* square, si
 // Masking patterns for QR codes
 // Formulae taken from https://www.thonky.com/qr-code-tutorial/mask-patterns
 // Return true if the bit at (x, y) should be flipped
-bool mask1(size_t x, size_t y) { return (x + y) % 1 == 0; }
-bool mask2(size_t x, size_t y) { return y % 1 == 0; }
+typedef bool (*MaskFn)(size_t x, size_t y);
+
+bool mask1(size_t x, size_t y) { return (x + y) % 2 == 0; }
+bool mask2(size_t x, size_t y) { return y % 2 == 0; }
 bool mask3(size_t x, size_t y) { return x % 3 == 0; }
 bool mask4(size_t x, size_t y) { return (x + y) % 3 == 0; }
 bool mask5(size_t x, size_t y) { return ((y / 2) + (x + 3)) % 2 == 0; }
@@ -126,11 +128,18 @@ bool mask6(size_t x, size_t y) { return (x * y) % 2 + (x * y) % 3 == 0; }
 bool mask7(size_t x, size_t y) { return ((x * y) % 2 + (x * y) % 3) % 2 == 0; }
 bool mask8(size_t x, size_t y) { return ((x + y) % 2 + (x * y) % 3) % 2 == 0; }
 
-bool (*mask_pats[8])(size_t x, size_t y) = {
-    mask1, mask2, mask3, mask4, mask5, mask6, mask7, mask8
+const static MaskFn mask_pats[8] = {
+     mask1, mask2, mask3, mask4, mask5, mask6, mask7, mask8
 };
 
-uint8_t* create_qr(Version ver, uint8_t* data, size_t size) {
+// bool (*mask_pats[8])(size_t x, size_t y) = {
+//     mask1, mask2, mask3, mask4, mask5, mask6, mask7, mask8
+// };
+
+// The following 2 data tables are from
+// https://www.thonky.com/qr-code-tutorial/format-version-tables
+
+void write_function_patterns(Version ver, uint8_t* qr, size_t side) {
     // Finder pattern
     const static uint8_t finder_pat[] = {
         1, 1, 1, 1, 1, 1, 1,
@@ -151,22 +160,6 @@ uint8_t* create_qr(Version ver, uint8_t* data, size_t size) {
         1, 1, 1, 1, 1,
     };
 
-    // Side length of the qr code
-    uint32_t side = (ver - 1) * 4 + 21;
-
-    // Allocate space for 8 versions of the qr code (for masking)
-    uint8_t* masked_qrs[8];
-    for (uint32_t i = 0; i < 8; ++i)
-        masked_qrs[i] = (uint8_t*)malloc(side * side);
-
-    // We will write the functional patterns to the first one
-    // and then copy them into the rest of the qr code versions
-    uint8_t* qr = masked_qrs[0];
-
-    // Fill the code with 2 (unwritten) so that we can determine
-    // which modules are for data (since 1s and 0s are written for function patterns)
-    memset(qr, 2, side * side);
-
     // Write finder patterns
     write_square(qr, side, finder_pat, 7, 0, 0);
     write_square(qr, side, finder_pat, 7, side - 7, 0);
@@ -185,10 +178,9 @@ uint8_t* create_qr(Version ver, uint8_t* data, size_t size) {
         qr[i * side + bottom_start] = 0; // bottom left
     }
 
-    // TODO: is this necessary?
-    // (probably since format info includes the mask
-    // Reserve space for format information
-    // Reserve space for version information (version 7 and higher)
+    // Write the dark module
+    size_t dark_module = side * (side - 8) + 8; // The position of the dark module
+    qr[dark_module] = 1;
 
     // Write alignment patterns
     uint32_t coord_pairs = align_pat_side_coords(ver);
@@ -203,15 +195,117 @@ uint8_t* create_qr(Version ver, uint8_t* data, size_t size) {
     }
 
     // Write timing patterns
-    size_t start = 6 * side + 6;
+    uint32_t start = 6 * side + 6;
     for (uint32_t i = 0; i < side - 13; ++i) {
         qr[start + i] = 1 - (i & 1);
         qr[start + i * side] = 1 - (i & 1);
     }
-    
-    // TODO: Copy the function patterns to the other qr codes
+}
 
-    // Write the data modules (data and error correction codes)
+void write_format_info(Version ver, ErrorLevel lvl, uint32_t mask_pat, uint8_t* qr, size_t side) {
+    const static uint16_t format_strs[32] = {
+        0b111011111000100, 0b111001011110011,
+        0b111110110101010, 0b111100010011101,
+        0b110011000101111, 0b110001100011000,
+        0b110110001000001, 0b110100101110110,
+        0b101010000010010, 0b101000100100101,
+        0b101111001111100, 0b101101101001011,
+        0b100010111111001, 0b100000011001110,
+        0b100111110010111, 0b100101010100000,
+        0b011010101011111, 0b011000001101000,
+        0b011111100110001, 0b011101000000110,
+        0b010010010110100, 0b010000110000011,
+        0b010111011011010, 0b010101111101101,
+        0b001011010001001, 0b001001110111110,
+        0b001110011100111, 0b001100111010000,
+        0b000011101100010, 0b000001001010101,
+        0b000110100001100, 0b000100000111011,
+    };
+
+    // Write the format string
+    // uint16_t format_str = 0b110011000101111;
+    uint16_t format_str = format_strs[lvl * 8 + mask_pat];
+
+    // Write the bottom-left format strip
+    size_t start = side * (side - 7) + 8;
+    for (uint32_t i = 0; i < 7; ++i) {
+        qr[start + (side * i)] = format_str >> (8 + i) & 1;
+    }
+    
+    // Write the top-right format strip
+    start = side * 8 + side - 8;
+    for (uint32_t i = 0; i < 8; ++i) {
+        qr[start + i] = format_str >> (7 - i) & 1;
+    }
+
+    // Write the top-left format strip
+
+    // The three bits in the corner
+    // (We do these separately since the timing
+    // pattern interferes with the regular line)
+    size_t bit_7_pos = side * 8 + 8;
+    qr[bit_7_pos - 1]    = format_str >> 8 & 1;
+    qr[bit_7_pos]        = format_str >> 7 & 1;
+    qr[bit_7_pos - side] = format_str >> 6 & 1;
+
+    // Top-left bottom row
+    start = side * 8;
+    for (uint32_t i = 0; i < 6; ++i) {
+        qr[start + i] = format_str >> (14 - i) & 1;
+    }
+
+    // Top-left right column
+    start = 8;
+    for (uint32_t i = 0; i < 6; ++i) {
+        qr[start + (side * i)] = format_str >> i & 1;
+    }
+}
+
+void write_version_info(Version ver, uint8_t* qr, size_t side) {
+    const static uint32_t version_strs[34] = {
+        0b000111110010010100, 0b001000010110111100,
+        0b001001101010011001, 0b001010010011010011,
+        0b001011101111110110, 0b001100011101100010,
+        0b001101100001000111, 0b001110011000001101,
+        0b001111100100101000, 0b010000101101111000,
+        0b010001010001011101, 0b010010101000010111,
+        0b010011010100110010, 0b010100100110100110,
+        0b010101011010000011, 0b010110100011001001,
+        0b010111011111101100, 0b011000111011000100,
+        0b011001000111100001, 0b011010111110101011,
+        0b011011000010001110, 0b011100110000011010,
+        0b011101001100111111, 0b011110110101110101,
+        0b011111001001010000, 0b100000100111010101,
+        0b100001011011110000, 0b100010100010111010,
+        0b100011011110011111, 0b100100101100001011,
+        0b100101010000101110, 0b100110101001100100,
+        0b100111010101000001, 0b101000110001101001,
+    };
+
+    uint32_t version_str = version_strs[ver - 7];
+
+    // Top-right version block
+    uint32_t start = side - 11;
+    for (uint32_t y = 0; y < 6; y++) {
+        for (uint32_t x = 0; x < 3; x++) {
+            size_t pos = start + (y * side) + x;
+            uint32_t index = x * 3 + y;
+            qr[pos] = version_str >> index & 1;
+        }
+    }
+
+    // Top-right version block
+    start = side * (side - 11);
+    for (uint32_t x = 0; x < 6; x++) {
+        for (uint32_t y = 0; y < 3; y++) {
+            size_t pos = start + (y * side) + x;
+            uint32_t index = x * 3 + y;
+            qr[pos] = version_str >> index & 1;
+        }
+    }
+}
+
+void write_data(Version ver, MaskFn mask, uint8_t* qr, size_t side, uint8_t* data, size_t size) {
     size_t pos = side * side - 1; // The position on the qr code (start bottom-right)
     size_t idx = 0;               // The index of the current bit in data
     size_t stop = size * 8;       // TODO: GET STOP MODULE
@@ -221,8 +315,10 @@ uint8_t* create_qr(Version ver, uint8_t* data, size_t size) {
         if (qr[pos] == 2) {
             // Write the current bit to each mask according to its mask rules
             uint8_t byte = data[idx >> 3];
-            uint8_t bit = (byte >> (idx & 7)) & 1;
-            qr[pos] = bit;
+            uint8_t bit = (byte >> ((7 - idx) & 7)) & 1;
+            size_t x = pos % side;
+            size_t y = pos / side;
+            qr[pos] = bit ^ mask(x, y);
             ++idx;
         }
 
@@ -253,10 +349,62 @@ uint8_t* create_qr(Version ver, uint8_t* data, size_t size) {
         dir = !dir;
     }
 
+    // Add remainder bits
+    pos -= side - 1;
+    printf("SIDE: %zu", side);
+    printf("POSITION: X: %zu, Y: %zu\n", pos % side, pos / side);
+
+    stop = side * 8;
+    while (pos > stop) {
+        size_t x = pos % side;
+        size_t y = pos / side;
+        qr[pos] = 0 ^ mask(x, y);
+        pos -= side;
+        printf("x: %zu y: %zu\n", x, y);
+    }
+}
+
+uint8_t* create_qr(Version ver, ErrorLevel lvl, uint8_t* data, size_t size) {
+    // Side length of the qr code
+    uint32_t side = (ver - 1) * 4 + 21;
+
+    // Allocate space for 8 versions of the qr code (for masking)
+    uint8_t* masked_qrs[8];
+    for (uint32_t i = 0; i < 8; ++i)
+        masked_qrs[i] = (uint8_t*)malloc(side * side);
+
+    // Write the functional patterns to the first one
+    // then copy them into the rest of the qr code versions
+    uint8_t* qr = masked_qrs[0];
+
+    // Fill the code with 2 (unwritten) so that we can determine
+    // which modules are for data after we write the function
+    // patterns and format info (since 1s and 0s are written for function patterns)
+    memset(qr, 2, side * side);
+
+    // Write the function patterns
+    write_function_patterns(ver, qr, side);
+
+    // Write version information (version 7+)
+    if (ver > 6)
+        write_version_info(ver, qr, side);
+
+    // Repeat for every mask type
+    for (uint8_t m = 0; m < 8; ++m) {
+        // Write the version and format information
+        // write_format_info(ver, lvl, m, masked_qrs[m], side);
+
+        // Write the data modules (data and error correction codes)
+        // write_data(ver, mask_pats[m], masked_qrs[m], side, data, size);
+    }
+    write_format_info(ver, lvl, 0, masked_qrs[0], side);
+    write_data(ver, mask_pats[0], qr, side, data, size);
+
     // TODO: Evaluate the masks
     
     // Delete the unneeded masks
     size_t chosen_one = 0;
+    qr = masked_qrs[chosen_one];
     for (uint32_t i = 0; i < 8; ++i) {
         if (i == chosen_one)
             continue;
